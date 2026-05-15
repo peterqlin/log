@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,13 +17,14 @@ func main() {
 	// 1. Define CLI flags
 	setDest := flag.String("set-dest", "", "Set the destination folder for daily logs")
 	mAgo := flag.Int("m-ago", 0, "Minutes ago to log the entry")
-	hAgo := flag.Int("h-ago", 0, "Hours ago to log the entry")
+	hAgo := flag.Float64("h-ago", 0.0, "Hours ago to log the entry (e.g. 1.5)")
+	around := flag.Bool("around", false, "Apply a random +/- 5 minute offset to the log time")
 
 	// Custom usage message
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: log [flags] <activity>\n\nFlags:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExample:\n  log --m-ago 30 went to gym\n  log --set-dest \"C:\\Users\\Name\\Documents\\Obsidian\\Daily\"\n")
+		fmt.Fprintf(os.Stderr, "\nExample:\n  log --h-ago 1.5 --m-ago 30 --around went to gym\n  log --set-dest \"C:\\Users\\Name\\Documents\\Obsidian\\Daily\"\n")
 	}
 
 	flag.Parse()
@@ -80,8 +82,15 @@ func main() {
 
 	// 6. Calculate Time
 	now := time.Now()
-	// Subtract the provided hours and minutes
-	logTime := now.Add(-time.Duration(*mAgo) * time.Minute).Add(-time.Duration(*hAgo) * time.Hour)
+	
+	// Subtract the provided hours (float64 converted to Duration) and minutes
+	logTime := now.Add(-time.Duration(*mAgo) * time.Minute).Add(-time.Duration(*hAgo * float64(time.Hour)))
+	
+	if *around {
+		// Generate random offset between -5 and 5 minutes (rand.Intn(11) gives 0-10)
+		offsetMinutes := rand.Intn(11) - 5
+		logTime = logTime.Add(time.Duration(offsetMinutes) * time.Minute)
+	}
 	
 	// Formatting
 	dateStr := logTime.Format("2006.01.02") // YYYY.MM.DD
@@ -101,6 +110,7 @@ func main() {
 	// sort.Search returns the smallest index i where the function is true
 	insertIdx := sort.Search(len(lines), func(i int) bool {
 		line := lines[i]
+		// Need at least 8 chars for "03:04 PM"
 		if len(line) >= 8 {
 			lineTimeStr := line[:8]
 			lineTimeParsed, err := time.Parse("03:04 PM", lineTimeStr)
